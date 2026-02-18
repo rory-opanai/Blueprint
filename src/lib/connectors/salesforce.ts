@@ -23,23 +23,51 @@ type SalesforceCreateResponse = {
   errors: string[];
 };
 
-function sfConfig() {
-  const instanceUrl = process.env.SALESFORCE_INSTANCE_URL;
-  const accessToken = process.env.SALESFORCE_ACCESS_TOKEN;
-  const apiVersion = process.env.SALESFORCE_API_VERSION ?? "v60.0";
+type SalesforceRuntimeConfig = {
+  instanceUrl: string;
+  accessToken: string;
+  apiVersion: string;
+  tasObject: string;
+  tasOpportunityField: string;
+  taskWhatIdField: string;
+};
+
+export type SalesforceCredentialInput = {
+  instanceUrl?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  apiVersion?: string;
+  tasObject?: string;
+  tasOpportunityField?: string;
+  taskWhatIdField?: string;
+  tasFieldMap?: Record<string, string>;
+};
+
+function sfConfig(credential?: SalesforceCredentialInput): SalesforceRuntimeConfig | null {
+  const instanceUrl = credential?.instanceUrl ?? process.env.SALESFORCE_INSTANCE_URL;
+  const accessToken = credential?.accessToken ?? process.env.SALESFORCE_ACCESS_TOKEN;
+  const apiVersion = credential?.apiVersion ?? process.env.SALESFORCE_API_VERSION ?? "v60.0";
+  const tasObject = credential?.tasObject ?? process.env.SALESFORCE_TAS_OBJECT ?? "Opportunity_Blueprint__c";
+  const tasOpportunityField =
+    credential?.tasOpportunityField ?? process.env.SALESFORCE_TAS_OPPORTUNITY_FIELD ?? "Opportunity__c";
+  const taskWhatIdField = credential?.taskWhatIdField ?? process.env.SALESFORCE_TASK_WHATID_FIELD ?? "WhatId";
 
   if (!instanceUrl || !accessToken) return null;
   return {
     instanceUrl: instanceUrl.replace(/\/$/, ""),
     accessToken,
     apiVersion,
-    tasObject: process.env.SALESFORCE_TAS_OBJECT ?? "Opportunity_Blueprint__c",
-    tasOpportunityField: process.env.SALESFORCE_TAS_OPPORTUNITY_FIELD ?? "Opportunity__c",
-    taskWhatIdField: process.env.SALESFORCE_TASK_WHATID_FIELD ?? "WhatId"
+    tasObject,
+    tasOpportunityField,
+    taskWhatIdField
   };
 }
 
-function parseTasFieldMap(): Record<string, string> {
+function parseTasFieldMap(credential?: SalesforceCredentialInput): Record<string, string> {
+  if (credential?.tasFieldMap && Object.keys(credential.tasFieldMap).length > 0) {
+    return credential.tasFieldMap;
+  }
+
   const raw = process.env.SALESFORCE_TAS_FIELD_MAP;
   if (!raw) return {};
 
@@ -55,10 +83,14 @@ function escapeSoql(value: string): string {
   return value.replace(/'/g, "\\'");
 }
 
-async function salesforceRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const config = sfConfig();
+async function salesforceRequest<T>(
+  path: string,
+  init: RequestInit = {},
+  credential?: SalesforceCredentialInput
+): Promise<T> {
+  const config = sfConfig(credential);
   if (!config) {
-    throw new Error("Salesforce is not configured. Set SALESFORCE_INSTANCE_URL and SALESFORCE_ACCESS_TOKEN.");
+    throw new Error("Salesforce is not configured.");
   }
 
   const response = await fetch(`${config.instanceUrl}/services/data/${config.apiVersion}${path}`, {
@@ -82,27 +114,31 @@ async function salesforceRequest<T>(path: string, init: RequestInit = {}): Promi
   return (await response.json()) as T;
 }
 
-async function querySalesforce<T>(soql: string): Promise<T[]> {
+async function querySalesforce<T>(soql: string, credential?: SalesforceCredentialInput): Promise<T[]> {
   const result = await salesforceRequest<SalesforceQueryResponse<T>>(
-    `/query?q=${encodeURIComponent(soql)}`
+    `/query?q=${encodeURIComponent(soql)}`,
+    {},
+    credential
   );
   return result.records ?? [];
 }
 
-export function isSalesforceEnabled(): boolean {
-  return Boolean(sfConfig());
+export function isSalesforceEnabled(credential?: SalesforceCredentialInput): boolean {
+  return Boolean(sfConfig(credential));
 }
 
-export async function probeSalesforceConnection(): Promise<{
+export async function probeSalesforceConnection(
+  credential?: SalesforceCredentialInput
+): Promise<{
   connected: boolean;
   message?: string;
 }> {
-  if (!sfConfig()) {
-    return { connected: false, message: "Missing SALESFORCE_INSTANCE_URL or SALESFORCE_ACCESS_TOKEN." };
+  if (!sfConfig(credential)) {
+    return { connected: false, message: "Missing Salesforce instance URL or access token." };
   }
 
   try {
-    await salesforceRequest<Record<string, unknown>>("/limits");
+    await salesforceRequest<Record<string, unknown>>("/limits", {}, credential);
     return { connected: true };
   } catch (error) {
     return {
@@ -114,8 +150,9 @@ export async function probeSalesforceConnection(): Promise<{
 
 export async function fetchOpportunitiesFromSalesforce(options?: {
   ownerEmail?: string;
+  credential?: SalesforceCredentialInput;
 }): Promise<DealCard[]> {
-  if (!sfConfig()) {
+  if (!sfConfig(options?.credential)) {
     return [];
   }
 
@@ -124,7 +161,7 @@ export async function fetchOpportunitiesFromSalesforce(options?: {
     : "";
 
   const soql = `SELECT Id, Name, StageName, Amount, CloseDate, Account.Name, Owner.Name, Owner.Email FROM Opportunity WHERE IsClosed = false${ownerFilter} ORDER BY CloseDate ASC LIMIT 100`;
-  const records = await querySalesforce<SalesforceOpportunityRecord>(soql);
+  const records = await querySalesforce<SalesforceOpportunityRecord>(soql, options?.credential);
 
   return records.map((record) => ({
     opportunityId: record.Id,
@@ -153,9 +190,10 @@ export async function fetchOpportunitiesFromSalesforce(options?: {
 }
 
 export async function createOpportunityInSalesforce(
-  draft: ManualDealDraft
+  draft: ManualDealDraft,
+  credential?: SalesforceCredentialInput
 ): Promise<{ opportunityId: string }> {
-  if (!sfConfig()) {
+  if (!sfConfig(credential)) {
     throw new Error("Salesforce is not configured.");
   }
 
@@ -170,10 +208,14 @@ export async function createOpportunityInSalesforce(
     payload.AccountId = draft.salesforceAccountId;
   }
 
-  const created = await salesforceRequest<SalesforceCreateResponse>("/sobjects/Opportunity", {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
+  const created = await salesforceRequest<SalesforceCreateResponse>(
+    "/sobjects/Opportunity",
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    },
+    credential
+  );
 
   if (!created.success) {
     throw new Error(`Failed to create Opportunity: ${created.errors.join("; ")}`);
@@ -183,17 +225,18 @@ export async function createOpportunityInSalesforce(
 }
 
 export async function fetchTasStateFromSalesforce(
-  opportunityId: string
+  opportunityId: string,
+  credential?: SalesforceCredentialInput
 ): Promise<TasQuestionState[]> {
-  const config = sfConfig();
+  const config = sfConfig(credential);
   if (!config) return [];
 
-  const fieldMap = parseTasFieldMap();
+  const fieldMap = parseTasFieldMap(credential);
   if (Object.keys(fieldMap).length === 0) return [];
 
   const mappedFields = Array.from(new Set(Object.values(fieldMap))).join(", ");
   const soql = `SELECT Id, LastModifiedDate, LastModifiedBy.Name, ${mappedFields} FROM ${config.tasObject} WHERE ${config.tasOpportunityField} = '${escapeSoql(opportunityId)}' ORDER BY LastModifiedDate DESC LIMIT 1`;
-  const rows = await querySalesforce<Record<string, unknown>>(soql);
+  const rows = await querySalesforce<Record<string, unknown>>(soql, credential);
   const row = rows[0];
   if (!row) return [];
 
@@ -221,12 +264,12 @@ export async function fetchTasStateFromSalesforce(
   );
 }
 
-async function findTasRecordId(opportunityId: string): Promise<string | null> {
-  const config = sfConfig();
+async function findTasRecordId(opportunityId: string, credential?: SalesforceCredentialInput): Promise<string | null> {
+  const config = sfConfig(credential);
   if (!config) return null;
 
   const soql = `SELECT Id FROM ${config.tasObject} WHERE ${config.tasOpportunityField} = '${escapeSoql(opportunityId)}' ORDER BY LastModifiedDate DESC LIMIT 1`;
-  const rows = await querySalesforce<{ Id: string }>(soql);
+  const rows = await querySalesforce<{ Id: string }>(soql, credential);
   return rows[0]?.Id ?? null;
 }
 
@@ -236,35 +279,44 @@ export async function writeTasAnswerToSalesforce(input: {
   answer: string;
   actor: string;
   evidenceLinks: string[];
+  credential?: SalesforceCredentialInput;
 }) {
-  const config = sfConfig();
+  const config = sfConfig(input.credential);
   if (!config) {
     throw new Error("Salesforce is not configured.");
   }
 
-  const fieldMap = parseTasFieldMap();
+  const fieldMap = parseTasFieldMap(input.credential);
   const fieldName = fieldMap[input.questionId];
   if (!fieldName) {
     throw new Error(
-      `Missing field map for ${input.questionId}. Configure SALESFORCE_TAS_FIELD_MAP.`
+      `Missing field map for ${input.questionId}. Configure SALESFORCE_TAS_FIELD_MAP or connector metadata.`
     );
   }
 
-  const tasRecordId = await findTasRecordId(input.opportunityId);
+  const tasRecordId = await findTasRecordId(input.opportunityId, input.credential);
 
   if (tasRecordId) {
-    await salesforceRequest(`/sobjects/${config.tasObject}/${tasRecordId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ [fieldName]: input.answer })
-    });
+    await salesforceRequest(
+      `/sobjects/${config.tasObject}/${tasRecordId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ [fieldName]: input.answer })
+      },
+      input.credential
+    );
   } else {
-    await salesforceRequest(`/sobjects/${config.tasObject}`, {
-      method: "POST",
-      body: JSON.stringify({
-        [config.tasOpportunityField]: input.opportunityId,
-        [fieldName]: input.answer
-      })
-    });
+    await salesforceRequest(
+      `/sobjects/${config.tasObject}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          [config.tasOpportunityField]: input.opportunityId,
+          [fieldName]: input.answer
+        })
+      },
+      input.credential
+    );
   }
 
   return {
@@ -280,8 +332,9 @@ export async function writeCommitmentTaskToSalesforce(input: {
   title: string;
   owner: string;
   dueDate: string;
+  credential?: SalesforceCredentialInput;
 }) {
-  const config = sfConfig();
+  const config = sfConfig(input.credential);
   if (!config) {
     throw new Error("Salesforce is not configured.");
   }
@@ -294,10 +347,14 @@ export async function writeCommitmentTaskToSalesforce(input: {
     [config.taskWhatIdField]: input.opportunityId
   };
 
-  const created = await salesforceRequest<SalesforceCreateResponse>("/sobjects/Task", {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
+  const created = await salesforceRequest<SalesforceCreateResponse>(
+    "/sobjects/Task",
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    },
+    input.credential
+  );
 
   if (!created.success) {
     throw new Error(`Failed to create Task: ${created.errors.join("; ")}`);

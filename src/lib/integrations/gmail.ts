@@ -14,16 +14,22 @@ type GmailMessageResponse = {
   internalDate?: string;
 };
 
-function gmailToken(): string | undefined {
-  return process.env.GOOGLE_GMAIL_ACCESS_TOKEN;
+export type GmailCredentialInput = {
+  accessToken?: string;
+};
+
+function gmailToken(credential?: GmailCredentialInput): string | undefined {
+  return credential?.accessToken ?? process.env.GOOGLE_GMAIL_ACCESS_TOKEN;
 }
 
-export function isGmailEnabled(): boolean {
-  return Boolean(gmailToken());
+export function isGmailEnabled(credential?: GmailCredentialInput): boolean {
+  return Boolean(gmailToken(credential));
 }
 
-export async function probeGmailConnection(): Promise<{ connected: boolean; message?: string }> {
-  const token = gmailToken();
+export async function probeGmailConnection(
+  credential?: GmailCredentialInput
+): Promise<{ connected: boolean; message?: string }> {
+  const token = gmailToken(credential);
   if (!token) {
     return { connected: false, message: "Missing GOOGLE_GMAIL_ACCESS_TOKEN." };
   }
@@ -42,8 +48,11 @@ export async function probeGmailConnection(): Promise<{ connected: boolean; mess
   }
 }
 
-export async function fetchGmailSignal(query: SourceSignalQuery): Promise<DealSignal | null> {
-  const token = gmailToken();
+export async function fetchGmailSignal(
+  query: SourceSignalQuery,
+  credential?: GmailCredentialInput
+): Promise<DealSignal | null> {
+  const token = gmailToken(credential);
   if (!token) return null;
 
   const gmailQuery = [

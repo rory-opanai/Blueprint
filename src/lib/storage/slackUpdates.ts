@@ -1,28 +1,13 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { DealSignal, SourceSignalQuery } from "@/lib/types";
+import { DealSignal, SourceSignalQuery, UserRole } from "@/lib/types";
+import { prisma } from "@/lib/prisma";
 
-const SERVERLESS_ENV_HINTS = [
-  process.env.VERCEL,
-  process.env.AWS_LAMBDA_FUNCTION_NAME,
-  process.env.LAMBDA_TASK_ROOT,
-  process.env.RENDER
-];
-
-const STORE_DIR = process.env.BLUEPRINT_DATA_DIR
-  ? path.resolve(process.env.BLUEPRINT_DATA_DIR)
-  : SERVERLESS_ENV_HINTS.some(Boolean)
-    ? "/tmp/blueprint-data"
-    : path.join(process.cwd(), ".data");
-const STORE_FILE = path.join(STORE_DIR, "slack-deal-updates.json");
-let useInMemoryStore = false;
-let inMemoryUpdates: SlackDealUpdate[] = [];
-
-type SlackDealUpdate = {
+type SlackDealUpdateInput = {
   eventId: string;
+  userId: string;
   channelId: string;
   messageTs: string;
-  userId?: string;
+  threadTs?: string;
+  slackUserId?: string;
   text: string;
   permalink: string;
   opportunityId?: string;
@@ -30,109 +15,6 @@ type SlackDealUpdate = {
   opportunityName?: string;
   createdAt: string;
 };
-
-function isReadOnlyError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const code = (error as { code?: string }).code;
-  const message = (error as { message?: string }).message ?? "";
-  return (
-    code === "EROFS" ||
-    code === "EACCES" ||
-    code === "EPERM" ||
-    message.toLowerCase().includes("read-only file system")
-  );
-}
-
-async function ensureStore(): Promise<void> {
-  if (useInMemoryStore) return;
-
-  try {
-    await mkdir(STORE_DIR, { recursive: true });
-  } catch (error) {
-    if (isReadOnlyError(error)) {
-      useInMemoryStore = true;
-      return;
-    }
-    throw error;
-  }
-
-  try {
-    await readFile(STORE_FILE, "utf8");
-  } catch {
-    try {
-      await writeFile(STORE_FILE, "[]\n", "utf8");
-    } catch (error) {
-      if (isReadOnlyError(error)) {
-        useInMemoryStore = true;
-        return;
-      }
-      throw error;
-    }
-  }
-}
-
-async function readUpdates(): Promise<SlackDealUpdate[]> {
-  if (useInMemoryStore) {
-    return [...inMemoryUpdates];
-  }
-
-  await ensureStore();
-  if (useInMemoryStore) {
-    return [...inMemoryUpdates];
-  }
-
-  const raw = await readFile(STORE_FILE, "utf8");
-
-  try {
-    const parsed = JSON.parse(raw) as SlackDealUpdate[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-async function writeUpdates(updates: SlackDealUpdate[]): Promise<void> {
-  if (useInMemoryStore) {
-    inMemoryUpdates = [...updates];
-    return;
-  }
-
-  await ensureStore();
-  if (useInMemoryStore) {
-    inMemoryUpdates = [...updates];
-    return;
-  }
-
-  try {
-    await writeFile(STORE_FILE, `${JSON.stringify(updates, null, 2)}\n`, "utf8");
-  } catch (error) {
-    if (isReadOnlyError(error)) {
-      useInMemoryStore = true;
-      inMemoryUpdates = [...updates];
-      return;
-    }
-    throw error;
-  }
-}
-
-export async function upsertSlackDealUpdate(update: SlackDealUpdate): Promise<void> {
-  const updates = await readUpdates();
-  const dedupeKey = `${update.channelId}:${update.messageTs}`;
-  const existingIndex = updates.findIndex(
-    (entry) => `${entry.channelId}:${entry.messageTs}` === dedupeKey || entry.eventId === update.eventId
-  );
-
-  if (existingIndex >= 0) {
-    updates[existingIndex] = {
-      ...updates[existingIndex],
-      ...update
-    };
-  } else {
-    updates.unshift(update);
-  }
-
-  await writeUpdates(updates.slice(0, 5000));
-}
 
 function normalize(value?: string): string {
   return (value ?? "")
@@ -142,56 +24,154 @@ function normalize(value?: string): string {
     .trim();
 }
 
-export async function fetchSlackContextSignal(
-  query: SourceSignalQuery
-): Promise<DealSignal | null> {
-  const updates = await readUpdates();
-  if (updates.length === 0) return null;
+export async function upsertSlackDealUpdate(update: SlackDealUpdateInput): Promise<void> {
+  await prisma.slackDealUpdate.upsert({
+    where: {
+      channelId_messageTs: {
+        channelId: update.channelId,
+        messageTs: update.messageTs
+      }
+    },
+    create: {
+      eventId: update.eventId,
+      userId: update.userId,
+      channelId: update.channelId,
+      messageTs: update.messageTs,
+      threadTs: update.threadTs,
+      slackUserId: update.slackUserId,
+      text: update.text,
+      permalink: update.permalink,
+      opportunityId: update.opportunityId,
+      accountName: update.accountName,
+      opportunityName: update.opportunityName,
+      createdAt: new Date(update.createdAt)
+    },
+    update: {
+      eventId: update.eventId,
+      userId: update.userId,
+      threadTs: update.threadTs,
+      slackUserId: update.slackUserId,
+      text: update.text,
+      permalink: update.permalink,
+      opportunityId: update.opportunityId,
+      accountName: update.accountName,
+      opportunityName: update.opportunityName,
+      createdAt: new Date(update.createdAt)
+    }
+  });
+}
 
-  const oppId = query.opportunityId?.trim();
-  const normalizedAccount = normalize(query.accountName);
-  const normalizedOpportunity = normalize(query.opportunityName);
-
-  const matched = updates.filter((update) => {
-    if (oppId && update.opportunityId && update.opportunityId === oppId) return true;
-
-    const updateAccount = normalize(update.accountName);
-    const updateOpportunity = normalize(update.opportunityName);
-    const text = normalize(update.text);
-
-    const accountHit =
-      Boolean(normalizedAccount) &&
-      (updateAccount.includes(normalizedAccount) || text.includes(normalizedAccount));
-    const opportunityHit =
-      Boolean(normalizedOpportunity) &&
-      (updateOpportunity.includes(normalizedOpportunity) || text.includes(normalizedOpportunity));
-
-    return accountHit || opportunityHit;
+export async function findSlackThreadRootDealReference(input: {
+  channelId: string;
+  threadTs: string;
+  userId: string;
+}): Promise<{ opportunityId?: string; accountName?: string; opportunityName?: string } | null> {
+  const row = await prisma.slackDealUpdate.findFirst({
+    where: {
+      channelId: input.channelId,
+      messageTs: input.threadTs,
+      userId: input.userId
+    }
   });
 
-  if (matched.length === 0) return null;
+  if (!row) return null;
+  return {
+    opportunityId: row.opportunityId ?? undefined,
+    accountName: row.accountName ?? undefined,
+    opportunityName: row.opportunityName ?? undefined
+  };
+}
 
-  const highlights = matched
-    .map((update) => update.text)
-    .filter(Boolean)
+export async function fetchSlackContextSignal(
+  query: SourceSignalQuery,
+  options?: { viewerUserId?: string; viewerRole?: UserRole }
+): Promise<DealSignal | null> {
+  const normalizedAccount = normalize(query.accountName);
+  const normalizedOpportunity = normalize(query.opportunityName);
+  const viewerRole = options?.viewerRole ?? "AD";
+  const viewerId = options?.viewerUserId;
+
+  const rows = await prisma.slackDealUpdate.findMany({
+    where: {
+      ...(viewerId && viewerRole !== "MANAGER"
+        ? {
+            userId: viewerId
+          }
+        : {}),
+      OR: [
+        ...(query.opportunityId
+          ? [
+              {
+                opportunityId: query.opportunityId
+              }
+            ]
+          : []),
+        ...(normalizedAccount
+          ? [
+              {
+                accountName: {
+                  contains: normalizedAccount,
+                  mode: "insensitive" as const
+                }
+              }
+            ]
+          : []),
+        ...(normalizedOpportunity
+          ? [
+              {
+                opportunityName: {
+                  contains: normalizedOpportunity,
+                  mode: "insensitive" as const
+                }
+              }
+            ]
+          : []),
+        {
+          text: {
+            contains: query.accountName,
+            mode: "insensitive"
+          }
+        },
+        {
+          text: {
+            contains: query.opportunityName,
+            mode: "insensitive"
+          }
+        }
+      ]
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: 40
+  });
+
+  if (rows.length === 0) return null;
+
+  const highlights = rows
+    .map((row) => {
+      const fromSelf = viewerId ? row.userId === viewerId : true;
+      const managerSummaryOnly = viewerRole === "MANAGER" && !fromSelf;
+      if (managerSummaryOnly) {
+        return `Slack update captured (${new Date(row.createdAt).toLocaleDateString()}).`;
+      }
+      return row.text;
+    })
     .slice(0, 4);
 
-  const deepLinks = matched
-    .map((update) => update.permalink)
-    .filter(Boolean)
-    .slice(0, 4);
-
-  const lastActivityAt = matched
-    .map((update) => Date.parse(update.createdAt))
-    .filter((ts) => Number.isFinite(ts))
-    .sort((a, b) => b - a)[0];
+  const deepLinks = Array.from(new Set(rows.map((row) => row.permalink).filter(Boolean))).slice(0, 6);
+  const hasOtherSources = Boolean(
+    viewerId && rows.some((row) => row.userId !== viewerId)
+  );
 
   return {
     source: "slack",
-    totalMatches: matched.length,
+    totalMatches: rows.length,
     highlights,
     deepLinks,
-    lastActivityAt: lastActivityAt ? new Date(lastActivityAt).toISOString() : undefined
+    lastActivityAt: rows[0]?.createdAt.toISOString(),
+    sourceOwner: hasOtherSources ? "other" : "self",
+    visibility: hasOtherSources ? "manager_summary" : "owner_only"
   };
 }
 

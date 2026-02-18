@@ -1,14 +1,23 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { getDashboardData } from "@/lib/data/store";
+import { requireUserSession } from "@/lib/auth/guards";
 
 export default async function WalkthroughPage({
   searchParams
 }: {
   searchParams: Promise<{ deal?: string; ownerEmail?: string }>;
 }) {
-  const { deal, ownerEmail } = await searchParams;
-  const deals = await getDashboardData({ ownerEmail, withSignals: true });
+  const { deal, ownerEmail: ownerEmailParam } = await searchParams;
+  const viewer = await requireUserSession();
+  const ownerEmail = ownerEmailParam ?? viewer.email ?? undefined;
+  const deals = await getDashboardData({
+    ownerEmail,
+    withSignals: true,
+    viewerUserId: viewer.id,
+    viewerEmail: viewer.email,
+    viewerRole: viewer.role
+  });
   const selected = deals.find((entry) => entry.opportunityId === deal) ?? deals[0];
 
   return (

@@ -1,13 +1,22 @@
 import { AppShell } from "@/components/app-shell";
 import { getDashboardData, getDealData } from "@/lib/data/store";
+import { requireUserSession } from "@/lib/auth/guards";
 
 export default async function AuditPage({
   searchParams
 }: {
   searchParams: Promise<{ ownerEmail?: string }>;
 }) {
-  const { ownerEmail } = await searchParams;
-  const deals = await getDashboardData({ ownerEmail, withSignals: false });
+  const { ownerEmail: ownerEmailParam } = await searchParams;
+  const viewer = await requireUserSession();
+  const ownerEmail = ownerEmailParam ?? viewer.email ?? undefined;
+  const deals = await getDashboardData({
+    ownerEmail,
+    withSignals: false,
+    viewerUserId: viewer.id,
+    viewerEmail: viewer.email,
+    viewerRole: viewer.role
+  });
 
   return (
     <AppShell>
@@ -25,7 +34,13 @@ export default async function AuditPage({
 
         {await Promise.all(
           deals.map(async (deal) => {
-            const detail = await getDealData(deal.opportunityId, { ownerEmail, withSignals: false });
+            const detail = await getDealData(deal.opportunityId, {
+              ownerEmail,
+              withSignals: false,
+              viewerUserId: viewer.id,
+              viewerEmail: viewer.email,
+              viewerRole: viewer.role
+            });
             if (!detail) return null;
 
             const audit = detail.audit;

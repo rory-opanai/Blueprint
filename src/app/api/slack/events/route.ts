@@ -4,11 +4,14 @@ import {
   extractDealReference,
   extractNamedField,
   isSlackEventsEnabled,
-  slackTargetChannelId,
   verifySlackSignature
 } from "@/lib/integrations/slack";
+import { findSlackChannelOwners } from "@/lib/connectors/accounts";
 import { invalidateSignalCache, listDealsForUser } from "@/lib/services/deal-aggregator";
-import { upsertSlackDealUpdate } from "@/lib/storage/slackUpdates";
+import {
+  findSlackThreadRootDealReference,
+  upsertSlackDealUpdate
+} from "@/lib/storage/slackUpdates";
 
 type SlackEventPayload = {
   type: string;
@@ -21,6 +24,7 @@ type SlackEventPayload = {
     user?: string;
     text?: string;
     ts?: string;
+    thread_ts?: string;
   };
 };
 
@@ -124,41 +128,71 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const restrictedChannel = slackTargetChannelId();
-  if (restrictedChannel && event.channel !== restrictedChannel) {
+  const subscriptions = await findSlackChannelOwners(event.channel);
+  if (subscriptions.length === 0) {
     return NextResponse.json({ ok: true });
   }
 
   const explicitDealRef = extractDealReference(event.text);
   const accountHint = extractNamedField(event.text, "account");
   const opportunityHint = extractNamedField(event.text, "opportunity");
-  const deals = await listDealsForUser({ withSignals: false });
+  const isThreadReply = Boolean(event.thread_ts && event.thread_ts !== event.ts);
 
-  const matched = matchDealByContext(
-    event.text,
-    explicitDealRef,
-    accountHint,
-    opportunityHint,
-    deals
+  if (!isThreadReply && !explicitDealRef) {
+    // Root posts must include `deal:<opportunityId>` to avoid ambiguous ingestion.
+    return NextResponse.json({ ok: true });
+  }
+
+  await Promise.all(
+    subscriptions.map(async (subscription) => {
+      let inheritedFromThread:
+        | { opportunityId?: string; accountName?: string; opportunityName?: string }
+        | null = null;
+      if (isThreadReply && event.thread_ts) {
+        inheritedFromThread = await findSlackThreadRootDealReference({
+          channelId: event.channel!,
+          threadTs: event.thread_ts,
+          userId: subscription.userId
+        });
+      }
+
+      if (isThreadReply && !explicitDealRef && !inheritedFromThread?.opportunityId) {
+        return;
+      }
+
+      const deals = await listDealsForUser({
+        withSignals: false,
+        viewerUserId: subscription.userId
+      });
+      const matched = matchDealByContext(
+        event.text!,
+        explicitDealRef ?? inheritedFromThread?.opportunityId,
+        accountHint ?? inheritedFromThread?.accountName,
+        opportunityHint ?? inheritedFromThread?.opportunityName,
+        deals
+      );
+
+      await upsertSlackDealUpdate({
+        eventId: payload.event_id ?? `${event.channel}:${event.ts}`,
+        userId: subscription.userId,
+        channelId: event.channel!,
+        messageTs: event.ts!,
+        threadTs: event.thread_ts,
+        slackUserId: event.user,
+        text: event.text!,
+        permalink: buildSlackPermalink(event.channel!, event.ts!),
+        opportunityId: matched.opportunityId ?? inheritedFromThread?.opportunityId,
+        accountName: matched.accountName ?? inheritedFromThread?.accountName,
+        opportunityName: matched.opportunityName ?? inheritedFromThread?.opportunityName,
+        createdAt: new Date(Number(event.ts!.split(".")[0]) * 1000).toISOString()
+      });
+
+      invalidateSignalCache({
+        accountName: matched.accountName ?? inheritedFromThread?.accountName,
+        opportunityName: matched.opportunityName ?? inheritedFromThread?.opportunityName
+      });
+    })
   );
-
-  await upsertSlackDealUpdate({
-    eventId: payload.event_id ?? `${event.channel}:${event.ts}`,
-    channelId: event.channel,
-    messageTs: event.ts,
-    userId: event.user,
-    text: event.text,
-    permalink: buildSlackPermalink(event.channel, event.ts),
-    opportunityId: matched.opportunityId,
-    accountName: matched.accountName,
-    opportunityName: matched.opportunityName,
-    createdAt: new Date(Number(event.ts.split(".")[0]) * 1000).toISOString()
-  });
-
-  invalidateSignalCache({
-    accountName: matched.accountName,
-    opportunityName: matched.opportunityName
-  });
 
   return NextResponse.json({ ok: true });
 }

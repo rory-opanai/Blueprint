@@ -24,11 +24,36 @@ export function DashboardClient() {
   const [createInSalesforce, setCreateInSalesforce] = useState(false);
   const [salesforceAccountId, setSalesforceAccountId] = useState("");
 
+  const pendingReviews = deals.reduce((sum, deal) => sum + deal.needsReviewCount, 0);
+  const highRiskDeals = deals.filter(
+    (deal) => deal.risk.severity === "high" || deal.risk.severity === "critical"
+  ).length;
+  const overdueCommitments = deals.reduce((sum, deal) => sum + deal.overdueCommitments, 0);
+
+  useEffect(() => {
+    void loadViewerDefaults();
+  }, []);
+
   useEffect(() => {
     if (ownerEmail) {
       void loadDeals(ownerEmail);
     }
   }, [ownerEmail]);
+
+  async function loadViewerDefaults() {
+    try {
+      const response = await fetch("/api/me", { cache: "no-store" });
+      const payload = (await response.json()) as {
+        data?: { email?: string; name?: string };
+      };
+      if (!response.ok || !payload.data) return;
+
+      setOwnerEmail((current) => current || payload.data?.email || "");
+      setOwnerName((current) => current || payload.data?.name || "");
+    } catch {
+      // Keep manual fields editable if profile lookup fails.
+    }
+  }
 
   async function loadDeals(email: string) {
     setLoadingDeals(true);
@@ -94,6 +119,25 @@ export function DashboardClient() {
 
   return (
     <div className="dashboard-stack">
+      <section className="metrics-row metrics-row-dashboard">
+        <article className="metric">
+          <span>Active deals</span>
+          <strong>{deals.length}</strong>
+        </article>
+        <article className="metric">
+          <span>Pending reviews</span>
+          <strong>{pendingReviews}</strong>
+        </article>
+        <article className="metric">
+          <span>High risk deals</span>
+          <strong>{highRiskDeals}</strong>
+        </article>
+        <article className="metric">
+          <span>Overdue commitments</span>
+          <strong>{overdueCommitments}</strong>
+        </article>
+      </section>
+
       <section className="control-bar card">
         <div>
           <label htmlFor="ownerEmail">Owner Email</label>

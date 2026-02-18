@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { DealSignal, SourceSignalQuery } from "@/lib/types";
+import { DealSignal, SourceSignalQuery, UserRole } from "@/lib/types";
 import { fetchJson } from "@/lib/integrations/http";
 import { fetchSlackContextSignal, slackPermalink } from "@/lib/storage/slackUpdates";
 
@@ -16,24 +16,24 @@ type SlackSearchResponse = {
   };
 };
 
-function slackToken(): string | undefined {
-  return process.env.SLACK_USER_TOKEN ?? process.env.SLACK_BOT_TOKEN;
+export type SlackCredentialInput = {
+  accessToken?: string;
+};
+
+function slackToken(credential?: SlackCredentialInput): string | undefined {
+  return credential?.accessToken ?? process.env.SLACK_USER_TOKEN ?? process.env.SLACK_BOT_TOKEN;
 }
 
-export function isSlackSearchEnabled(): boolean {
-  return Boolean(slackToken());
+export function isSlackSearchEnabled(credential?: SlackCredentialInput): boolean {
+  return Boolean(slackToken(credential));
 }
 
-export function isSlackEnabled(): boolean {
-  return Boolean(isSlackSearchEnabled() || process.env.SLACK_SIGNING_SECRET);
+export function isSlackEnabled(credential?: SlackCredentialInput): boolean {
+  return Boolean(isSlackSearchEnabled(credential) || process.env.SLACK_SIGNING_SECRET);
 }
 
 export function isSlackEventsEnabled(): boolean {
   return Boolean(process.env.SLACK_SIGNING_SECRET);
-}
-
-export function slackTargetChannelId(): string | undefined {
-  return process.env.SLACK_DEAL_UPDATES_CHANNEL_ID;
 }
 
 export function verifySlackSignature(
@@ -64,7 +64,7 @@ export function verifySlackSignature(
 }
 
 export function extractDealReference(text: string): string | undefined {
-  const match = text.match(/\b(?:deal|opp|opportunity)\s*[:#-]\s*([a-z0-9-]+)/i);
+  const match = text.match(/\bdeal\s*:\s*([a-z0-9-]+)/i);
   return match?.[1];
 }
 
@@ -80,13 +80,17 @@ export function buildSlackPermalink(channelId: string, messageTs: string): strin
   return slackPermalink(channelId, messageTs);
 }
 
-export async function probeSlackConnection(): Promise<{
+export async function probeSlackConnection(input?: {
+  credential?: SlackCredentialInput;
+  requireEvents?: boolean;
+}): Promise<{
   connected: boolean;
   mode: "search+events" | "events_only" | "search_only" | "disabled";
   message?: string;
 }> {
-  const token = slackToken();
+  const token = slackToken(input?.credential);
   const eventsEnabled = isSlackEventsEnabled();
+  const requireEvents = input?.requireEvents ?? false;
 
   const mode: "search+events" | "events_only" | "search_only" | "disabled" =
     token && eventsEnabled
@@ -99,6 +103,10 @@ export async function probeSlackConnection(): Promise<{
 
   if (!token && !eventsEnabled) {
     return { connected: false, mode, message: "Missing Slack token and SLACK_SIGNING_SECRET." };
+  }
+
+  if (requireEvents && !eventsEnabled) {
+    return { connected: false, mode, message: "Missing SLACK_SIGNING_SECRET for events ingestion." };
   }
 
   // Events-only mode can ingest Slack channel updates without outbound API calls.
@@ -140,16 +148,28 @@ export async function probeSlackConnection(): Promise<{
   }
 }
 
-export async function fetchSlackSignal(query: SourceSignalQuery): Promise<DealSignal | null> {
-  const token = slackToken();
-  const contextSignal = await fetchSlackContextSignal(query);
+export async function fetchSlackSignal(
+  query: SourceSignalQuery,
+  input?: {
+    credential?: SlackCredentialInput;
+    viewerUserId?: string;
+    viewerRole?: UserRole;
+  }
+): Promise<DealSignal | null> {
+  const token = slackToken(input?.credential);
+  const contextSignal = await fetchSlackContextSignal(query, {
+    viewerUserId: input?.viewerUserId,
+    viewerRole: input?.viewerRole
+  });
   if (!token) return contextSignal;
 
   const slackQuery = `${query.opportunityName} OR ${query.accountName}`;
 
   try {
     const response = await fetchJson<SlackSearchResponse>(
-      `https://slack.com/api/search.messages?query=${encodeURIComponent(slackQuery)}&count=5&sort=timestamp&sort_dir=desc`,
+      `https://slack.com/api/search.messages?query=${encodeURIComponent(
+        slackQuery
+      )}&count=5&sort=timestamp&sort_dir=desc`,
       {
         headers: {
           authorization: `Bearer ${token}`
@@ -180,7 +200,9 @@ export async function fetchSlackSignal(query: SourceSignalQuery): Promise<DealSi
         .map((item) => item.permalink)
         .filter((link): link is string => Boolean(link))
         .slice(0, 3),
-      lastActivityAt: lastTs ? new Date(lastTs * 1000).toISOString() : undefined
+      lastActivityAt: lastTs ? new Date(lastTs * 1000).toISOString() : undefined,
+      sourceOwner: "self",
+      visibility: "owner_only"
     };
 
     if (!contextSignal) {
@@ -203,7 +225,9 @@ export async function fetchSlackSignal(query: SourceSignalQuery): Promise<DealSi
       lastActivityAt:
         [contextSignal.lastActivityAt, apiSignal.lastActivityAt]
           .filter((value): value is string => Boolean(value))
-          .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? contextSignal.lastActivityAt
+          .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? contextSignal.lastActivityAt,
+      sourceOwner: contextSignal.sourceOwner === "other" ? "other" : "self",
+      visibility: contextSignal.visibility ?? "owner_only"
     };
   } catch (error) {
     console.error("slack integration failed", error);

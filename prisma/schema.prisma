@@ -37,6 +37,189 @@ enum RiskSeverity {
   CRITICAL
 }
 
+enum ConnectorProvider {
+  salesforce
+  gmail
+  slack
+  gong
+  gtm_agent
+}
+
+enum ConnectorAccountStatus {
+  connected
+  expired
+  error
+  disconnected
+}
+
+enum EvidenceVisibility {
+  OWNER_ONLY
+  MANAGER_SUMMARY
+}
+
+model User {
+  id            String                    @id @default(cuid())
+  name          String?
+  email         String?                   @unique
+  emailVerified DateTime?
+  image         String?
+  role          UserRole                  @default(AD)
+  accounts      Account[]
+  sessions      Session[]
+
+  connectorAccounts      ConnectorAccount[]
+  connectorHealth        ConnectorHealth[]
+  slackSubscriptions     SlackChannelSubscription[]
+  connectorOauthStates   ConnectorOauthState[]
+  manualDeals            ManualDeal[]
+  slackDealUpdates       SlackDealUpdate[]
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model ConnectorAccount {
+  id               String                 @id @default(cuid())
+  userId           String
+  provider         ConnectorProvider
+  status           ConnectorAccountStatus @default(disconnected)
+  scopes           Json?
+  externalUserId   String?
+  externalTenantId String?
+  lastCheckedAt    DateTime?
+  lastError        String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  user               User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credential         ConnectorCredential?
+  slackSubscriptions SlackChannelSubscription[]
+
+  @@unique([userId, provider])
+}
+
+model ConnectorCredential {
+  id                 String   @id @default(cuid())
+  connectorAccountId String   @unique
+  accessTokenEnc     String?
+  refreshTokenEnc    String?
+  apiKeyEnc          String?
+  apiSecretEnc       String?
+  metadata           Json?
+  expiresAt          DateTime?
+  encryptionVersion  Int      @default(1)
+  rotatedAt          DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  connectorAccount ConnectorAccount @relation(fields: [connectorAccountId], references: [id], onDelete: Cascade)
+}
+
+model SlackChannelSubscription {
+  id                 String   @id @default(cuid())
+  userId             String
+  connectorAccountId String
+  channelId          String
+  channelName        String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connectorAccount ConnectorAccount @relation(fields: [connectorAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+}
+
+model ConnectorOauthState {
+  id           String            @id @default(cuid())
+  userId       String
+  provider     ConnectorProvider
+  stateHash    String            @unique
+  redirectUri  String
+  pkceVerifier String?
+  expiresAt    DateTime
+  createdAt    DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ManualDeal {
+  id                  String   @id @default(cuid())
+  userId              String
+  accountName         String
+  opportunityName     String
+  stage               String
+  amount              Decimal  @db.Decimal(18, 2)
+  closeDate           DateTime
+  ownerName           String
+  ownerEmail          String
+  sourceOpportunityId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, ownerEmail])
+}
+
+model SlackDealUpdate {
+  id              String   @id @default(cuid())
+  eventId         String?
+  userId          String
+  channelId       String
+  messageTs       String
+  threadTs        String?
+  slackUserId     String?
+  text            String
+  permalink       String
+  opportunityId   String?
+  accountName     String?
+  opportunityName String?
+  createdAt       DateTime
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, messageTs])
+  @@index([userId, opportunityId])
+  @@index([channelId, threadTs])
+  @@index([eventId])
+}
+
 model OpportunityCache {
   id                String              @id
   accountName       String
@@ -92,7 +275,7 @@ model TasQuestionState {
 }
 
 model EvidencePointer {
-  id              String            @id @default(cuid())
+  id              String             @id @default(cuid())
   opportunityId   String
   questionStateId String?
   sourceType      String
@@ -101,8 +284,9 @@ model EvidencePointer {
   excerpt         String?
   capturedAt      DateTime
   confidence      Float?
-  createdAt       DateTime          @default(now())
-  questionState   TasQuestionState? @relation(fields: [questionStateId], references: [id], onDelete: SetNull)
+  visibility      EvidenceVisibility @default(MANAGER_SUMMARY)
+  createdAt       DateTime           @default(now())
+  questionState   TasQuestionState?  @relation(fields: [questionStateId], references: [id], onDelete: SetNull)
 }
 
 model SuggestionDelta {
@@ -173,14 +357,17 @@ model SourceMappingConfirmation {
 }
 
 model ConnectorHealth {
-  id             String   @id @default(cuid())
-  connectorType  String
+  id             String            @id @default(cuid())
+  userId         String
+  connectorType  ConnectorProvider
   status         String
   lastIngestedAt DateTime?
   details        String?
-  updatedAt      DateTime @updatedAt
+  updatedAt      DateTime          @updatedAt
 
-  @@unique([connectorType])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, connectorType])
 }
 
 model Commitment {

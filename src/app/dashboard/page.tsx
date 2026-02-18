@@ -6,9 +6,7 @@ export default function DashboardPage() {
     <AppShell>
       <section className="page-header">
         <h2>Command Center</h2>
-        <p>
-          Pull live deals from Salesforce, enrich from Gmail/Slack/Gong/GTM Agent, and create new cards when needed.
-        </p>
+        <p>Monitor active opportunities, review TAS coverage, and push updates with minimal admin overhead.</p>
       </section>
       <DashboardClient />
     </AppShell>

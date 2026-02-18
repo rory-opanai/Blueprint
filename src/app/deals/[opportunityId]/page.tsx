@@ -4,6 +4,7 @@ import { QuestionCard } from "@/components/question-card";
 import { TAS_TEMPLATE } from "@/lib/tas-template";
 import { getDealData } from "@/lib/data/store";
 import { currency } from "@/lib/utils";
+import { requireUserSession } from "@/lib/auth/guards";
 
 export default async function DealPage({
   params,
@@ -13,12 +14,26 @@ export default async function DealPage({
   searchParams: Promise<{ ownerEmail?: string }>;
 }) {
   const { opportunityId } = await params;
-  const { ownerEmail } = await searchParams;
-  const data = await getDealData(opportunityId, { ownerEmail, withSignals: true });
+  const { ownerEmail: ownerEmailParam } = await searchParams;
+  const viewer = await requireUserSession();
+  const ownerEmail = ownerEmailParam ?? viewer.email ?? undefined;
+  const data = await getDealData(opportunityId, {
+    ownerEmail,
+    withSignals: true,
+    viewerUserId: viewer.id,
+    viewerEmail: viewer.email,
+    viewerRole: viewer.role
+  });
 
   if (!data) {
     notFound();
   }
+
+  const managerRestricted =
+    viewer.role === "MANAGER" &&
+    data.deal.ownerEmail &&
+    viewer.email &&
+    data.deal.ownerEmail.toLowerCase() !== viewer.email.toLowerCase();
 
   return (
     <AppShell>
@@ -66,9 +81,18 @@ export default async function DealPage({
                   Last activity: {signal.lastActivityAt ? new Date(signal.lastActivityAt).toLocaleString() : "unknown"}
                 </p>
                 <ul>
-                  {signal.highlights.map((highlight) => (
-                    <li key={`${signal.source}-${highlight}`}>{highlight}</li>
-                  ))}
+                  {managerRestricted
+                    ? signal.deepLinks.slice(0, 3).map((link) => (
+                        <li key={`${signal.source}-${link}`}>
+                          Summary available for this source.{" "}
+                          <a href={link} target="_blank" rel="noreferrer">
+                            Open evidence
+                          </a>
+                        </li>
+                      ))
+                    : signal.highlights.map((highlight) => (
+                        <li key={`${signal.source}-${highlight}`}>{highlight}</li>
+                      ))}
                 </ul>
               </article>
             ))}

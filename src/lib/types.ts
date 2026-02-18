@@ -17,6 +17,11 @@ export type SuggestionStatus =
 export type RiskSeverity = "low" | "medium" | "high" | "critical";
 
 export type SourceSystem = "gmail" | "slack" | "gong" | "gtm_agent";
+export type ConnectorProvider = "salesforce" | "gmail" | "slack" | "gong" | "gtm_agent";
+export type ConnectorStatus = "missing_config" | "configured" | "connected" | "degraded" | "expired";
+export type ConnectorAction = "connect" | "reconnect" | "disconnect" | "configure_channel";
+export type SignalOwner = "self" | "other";
+export type SignalVisibility = "owner_only" | "manager_summary";
 export type InsightCategory =
   | "signer_path"
   | "economic_value"
@@ -45,6 +50,8 @@ export type DealSignal = {
   highlights: string[];
   deepLinks: string[];
   lastActivityAt?: string;
+  sourceOwner?: SignalOwner;
+  visibility?: SignalVisibility;
 };
 
 export type ConsolidatedInsight = {
@@ -154,6 +161,9 @@ export type DealDetail = {
 export type DealListOptions = {
   ownerEmail?: string;
   withSignals?: boolean;
+  viewerUserId?: string;
+  viewerEmail?: string;
+  viewerRole?: UserRole;
 };
 
 export type SourceSignalQuery = {
@@ -161,4 +171,25 @@ export type SourceSignalQuery = {
   accountName: string;
   opportunityName: string;
   ownerEmail?: string;
+  viewerUserId?: string;
+};
+
+export type ConnectorAccountView = {
+  connectorType: ConnectorProvider;
+  status: ConnectorStatus;
+  mode?: string;
+  details?: string;
+  lastCheckedAt?: string;
+  lastSyncedAt?: string;
+  action: ConnectorAction;
+  isWorkspaceException?: boolean;
+};
+
+export type SlackChannelSubscriptionView = {
+  id: string;
+  channelId: string;
+  channelName?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 };

@@ -7,6 +7,7 @@ import {
   fetchTasStateFromSalesforce
 } from "@/lib/connectors/salesforce";
 import { fetchGongSignal, isGongEnabled } from "@/lib/connectors/gong";
+import { viewerConnectorContext } from "@/lib/connectors/runtime";
 import { TAS_TEMPLATE, TAS_TOTAL_QUESTIONS } from "@/lib/tas-template";
 import {
   DealCard,
@@ -75,10 +76,19 @@ function inferRisk(criticalGaps: number, signals: DealSignal[]): { count: number
   return { count: score, severity: "low" };
 }
 
-async function collectSignals(deal: DealCard, withSignals: boolean): Promise<DealSignal[]> {
+async function collectSignals(
+  deal: DealCard,
+  withSignals: boolean,
+  options: {
+    connectors: Awaited<ReturnType<typeof viewerConnectorContext>>;
+    viewerUserId?: string;
+    viewerEmail?: string;
+    viewerRole?: "AD" | "SE" | "SA" | "MANAGER";
+  }
+): Promise<DealSignal[]> {
   if (!withSignals) return [];
 
-  const cacheKey = `${deal.accountName}:${deal.opportunityName}:${deal.ownerEmail ?? ""}`;
+  const cacheKey = `${options.connectors.mode}:${options.viewerUserId ?? "anon"}:${options.viewerRole ?? "AD"}:${deal.accountName}:${deal.opportunityName}:${deal.ownerEmail ?? ""}`;
   const cached = signalCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.payload;
@@ -88,15 +98,32 @@ async function collectSignals(deal: DealCard, withSignals: boolean): Promise<Dea
     opportunityId: deal.sourceOpportunityId ?? deal.opportunityId,
     accountName: deal.accountName,
     opportunityName: deal.opportunityName,
-    ownerEmail: deal.ownerEmail
+    ownerEmail: deal.ownerEmail,
+    viewerUserId: options.viewerUserId
   };
 
-  const [gmail, slack, gong, gtm] = await Promise.all([
-    isGmailEnabled() ? fetchGmailSignal(query) : Promise.resolve(null),
-    isSlackEnabled() ? fetchSlackSignal(query) : Promise.resolve(null),
-    isGongEnabled() ? fetchGongSignal(query) : Promise.resolve(null),
-    isGtmAgentEnabled() ? fetchGtmAgentSignal(query) : Promise.resolve(null)
-  ]);
+  const [gmail, slack, gong, gtm] =
+    options.connectors.mode === "legacy_env"
+      ? await Promise.all([
+          isGmailEnabled() ? fetchGmailSignal(query) : Promise.resolve(null),
+          isSlackEnabled() ? fetchSlackSignal(query) : Promise.resolve(null),
+          isGongEnabled() ? fetchGongSignal(query) : Promise.resolve(null),
+          isGtmAgentEnabled() ? fetchGtmAgentSignal(query) : Promise.resolve(null)
+        ])
+      : await Promise.all([
+          options.connectors.gmail
+            ? fetchGmailSignal(query, options.connectors.gmail)
+            : Promise.resolve(null),
+          options.connectors.slack
+            ? fetchSlackSignal(query, {
+                credential: options.connectors.slack,
+                viewerUserId: options.viewerUserId,
+                viewerRole: options.viewerRole
+              })
+            : Promise.resolve(null),
+          options.connectors.gongEnabled ? fetchGongSignal(query) : Promise.resolve(null),
+          options.connectors.gtmAgentEnabled ? fetchGtmAgentSignal(query) : Promise.resolve(null)
+        ]);
 
   const payload = [gmail, slack, gong, gtm].filter(
     (signal): signal is DealSignal => Boolean(signal)
@@ -130,20 +157,57 @@ export function invalidateSignalCache(criteria: {
   }
 }
 
-async function hydrateDeal(base: DealCard, withSignals: boolean): Promise<DealCard> {
+async function hydrateDeal(
+  base: DealCard,
+  withSignals: boolean,
+  options: {
+    connectors: Awaited<ReturnType<typeof viewerConnectorContext>>;
+    viewerUserId?: string;
+    viewerEmail?: string;
+    viewerRole?: "AD" | "SE" | "SA" | "MANAGER";
+  }
+): Promise<DealCard> {
   const tasStates =
     base.origin === "salesforce" || base.sourceOpportunityId
-      ? await fetchTasStateFromSalesforce(base.sourceOpportunityId ?? base.opportunityId)
+      ? await fetchTasStateFromSalesforce(
+          base.sourceOpportunityId ?? base.opportunityId,
+          options.connectors.mode === "legacy_env" ? undefined : options.connectors.salesforce
+        )
       : [];
 
-  const signals = await collectSignals(base, withSignals);
+  const signals = await collectSignals(base, withSignals, options);
   const tasSummary = summarizeTas(base.stage, tasStates);
   const pendingSuggestions = listSuggestions(base.sourceOpportunityId ?? base.opportunityId).filter(
     (suggestion) => suggestion.status === "pending"
   ).length;
 
-  const risk = inferRisk(tasSummary.criticalGapCount, signals);
-  const consolidatedInsights = consolidateDealSignals(signals);
+  const managerRestricted =
+    options.viewerRole === "MANAGER" &&
+    options.viewerEmail &&
+    base.ownerEmail &&
+    base.ownerEmail.toLowerCase() !== options.viewerEmail.toLowerCase();
+
+  const safeSignals = managerRestricted
+    ? signals.map((signal) => ({
+        ...signal,
+        highlights: signal.highlights.map(() => `Summary available from ${signal.source}.`),
+        visibility: "manager_summary" as const
+      }))
+    : signals;
+
+  const risk = inferRisk(tasSummary.criticalGapCount, safeSignals);
+  const consolidatedInsights = managerRestricted
+    ? safeSignals.map((signal, index) => ({
+        id: `${signal.source}-${index}`,
+        category: "general" as const,
+        summary: `${signal.totalMatches} ${signal.source} update(s) linked for this deal.`,
+        normalizedSummary: `${signal.source}-${signal.totalMatches}`,
+        sources: [signal.source],
+        evidenceLinks: signal.deepLinks.slice(0, 3),
+        occurrences: signal.totalMatches,
+        lastActivityAt: signal.lastActivityAt
+      }))
+    : consolidateDealSignals(safeSignals);
 
   return {
     ...base,
@@ -158,17 +222,39 @@ async function hydrateDeal(base: DealCard, withSignals: boolean): Promise<DealCa
     topGaps: tasSummary.topGaps.length > 0 ? tasSummary.topGaps : ["No critical TAS gaps detected"],
     risk,
     needsReviewCount: pendingSuggestions,
-    sourceSignals: signals,
+    sourceSignals: safeSignals,
     consolidatedInsights
   };
 }
 
 export async function listDealsForUser(options?: DealListOptions): Promise<DealCard[]> {
   const withSignals = options?.withSignals ?? true;
+  const connectors = options?.viewerUserId
+    ? await viewerConnectorContext(options.viewerUserId)
+    : {
+        mode: "legacy_env" as const,
+        salesforce: undefined,
+        gmail: undefined,
+        slack: undefined,
+        gongEnabled: true,
+        gtmAgentEnabled: true
+      };
 
   const [salesforceDeals, manualDeals] = await Promise.all([
-    fetchOpportunitiesFromSalesforce({ ownerEmail: options?.ownerEmail }),
-    listManualDeals(options?.ownerEmail)
+    connectors.mode === "legacy_env"
+      ? fetchOpportunitiesFromSalesforce({ ownerEmail: options?.ownerEmail })
+      : connectors.salesforce
+        ? fetchOpportunitiesFromSalesforce({
+            ownerEmail: options?.ownerEmail,
+            credential: connectors.salesforce
+          })
+        : Promise.resolve([]),
+    options?.viewerUserId
+      ? listManualDeals({
+          userId: options.viewerUserId,
+          ownerEmail: options?.ownerEmail
+        })
+      : Promise.resolve([])
   ]);
 
   const combined = [...manualDeals, ...salesforceDeals];
@@ -182,7 +268,14 @@ export async function listDealsForUser(options?: DealListOptions): Promise<DealC
   }
 
   const hydrated = await Promise.all(
-    Array.from(unique.values()).map((deal) => hydrateDeal(deal, withSignals))
+    Array.from(unique.values()).map((deal) =>
+      hydrateDeal(deal, withSignals, {
+        connectors,
+        viewerUserId: options?.viewerUserId,
+        viewerEmail: options?.viewerEmail,
+        viewerRole: options?.viewerRole
+      })
+    )
   );
 
   return hydrated.sort((a, b) => {
@@ -196,21 +289,50 @@ export async function getDealById(
   opportunityId: string,
   options?: DealListOptions
 ): Promise<DealDetail | null> {
+  const connectors = options?.viewerUserId
+    ? await viewerConnectorContext(options.viewerUserId)
+    : {
+        mode: "legacy_env" as const,
+        salesforce: undefined,
+        gmail: undefined,
+        slack: undefined,
+        gongEnabled: true,
+        gtmAgentEnabled: true
+      };
+
   const [deals, manual] = await Promise.all([
-    listDealsForUser({ ownerEmail: options?.ownerEmail, withSignals: options?.withSignals }),
-    getManualDealById(opportunityId)
+    listDealsForUser({
+      ownerEmail: options?.ownerEmail,
+      withSignals: options?.withSignals,
+      viewerUserId: options?.viewerUserId,
+      viewerEmail: options?.viewerEmail,
+      viewerRole: options?.viewerRole
+    }),
+    options?.viewerUserId
+      ? getManualDealById({ opportunityId, userId: options.viewerUserId })
+      : Promise.resolve(null)
   ]);
 
   const deal =
     deals.find((candidate) => candidate.opportunityId === opportunityId) ??
     deals.find((candidate) => candidate.sourceOpportunityId === opportunityId) ??
-    (manual ? await hydrateDeal(manual, options?.withSignals ?? true) : null);
+    (manual
+      ? await hydrateDeal(manual, options?.withSignals ?? true, {
+          connectors,
+          viewerUserId: options?.viewerUserId,
+          viewerEmail: options?.viewerEmail,
+          viewerRole: options?.viewerRole
+        })
+      : null);
 
   if (!deal) return null;
 
   const questions =
     deal.origin === "salesforce" || deal.sourceOpportunityId
-      ? await fetchTasStateFromSalesforce(deal.sourceOpportunityId ?? deal.opportunityId)
+      ? await fetchTasStateFromSalesforce(
+          deal.sourceOpportunityId ?? deal.opportunityId,
+          connectors.mode === "legacy_env" ? undefined : connectors.salesforce
+        )
       : TAS_TEMPLATE.flatMap((section) =>
           section.questions.map((question) => ({
             questionId: question.id,
@@ -232,14 +354,27 @@ export async function getDealById(
   };
 }
 
-export async function createDealCard(draft: ManualDealDraft): Promise<DealCard> {
+export async function createDealCard(input: {
+  draft: ManualDealDraft;
+  viewerUserId: string;
+  salesforceCredential?: Awaited<ReturnType<typeof viewerConnectorContext>>["salesforce"];
+}): Promise<DealCard> {
   let createdSalesforceId: string | undefined;
 
-  if (draft.createInSalesforce) {
-    const created = await createOpportunityInSalesforce(draft);
+  if (input.draft.createInSalesforce) {
+    const created = await createOpportunityInSalesforce(input.draft, input.salesforceCredential);
     createdSalesforceId = created.opportunityId;
   }
 
-  const createdManual = await createManualDeal(draft, createdSalesforceId);
-  return hydrateDeal(createdManual, true);
+  const createdManual = await createManualDeal({
+    userId: input.viewerUserId,
+    draft: input.draft,
+    sourceOpportunityId: createdSalesforceId
+  });
+  const connectors = await viewerConnectorContext(input.viewerUserId);
+  return hydrateDeal(createdManual, true, {
+    connectors,
+    viewerUserId: input.viewerUserId,
+    viewerEmail: input.draft.ownerEmail
+  });
 }

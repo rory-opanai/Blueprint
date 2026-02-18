@@ -42,3 +42,8 @@ next-env.d.ts
 
 # local data store
 /.data/
+
+# local codex + browser artifacts
+/.codex/
+/.playwright-cli/
+/output/
