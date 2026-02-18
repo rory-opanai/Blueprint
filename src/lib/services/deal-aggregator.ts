@@ -19,9 +19,11 @@ import {
   TasQuestionState
 } from "@/lib/types";
 import { createManualDeal, getManualDealById, listManualDeals } from "@/lib/storage/manual-deals";
+import { listManualTasAnswers } from "@/lib/storage/manual-tas";
 import { calculateAudit } from "@/lib/services/audit";
 import { listSuggestions } from "@/lib/services/suggestions";
 import { consolidateDealSignals } from "@/lib/services/signal-consolidator";
+import { prisma } from "@/lib/prisma";
 
 const signalCache = new Map<string, { expiresAt: number; payload: DealSignal[] }>();
 const SIGNAL_CACHE_TTL_MS = 1000 * 60 * 5;
@@ -173,13 +175,27 @@ async function hydrateDeal(
           base.sourceOpportunityId ?? base.opportunityId,
           options.connectors.mode === "legacy_env" ? undefined : options.connectors.salesforce
         )
-      : [];
+      : options.viewerUserId
+        ? await listManualTasAnswers({
+            dealId: base.opportunityId,
+            userId: options.viewerUserId
+          })
+        : [];
 
   const signals = await collectSignals(base, withSignals, options);
   const tasSummary = summarizeTas(base.stage, tasStates);
-  const pendingSuggestions = listSuggestions(base.sourceOpportunityId ?? base.opportunityId).filter(
-    (suggestion) => suggestion.status === "pending"
-  ).length;
+  const pendingSuggestions =
+    base.origin === "manual" && options.viewerUserId
+      ? await prisma.ingestionDelta.count({
+          where: {
+            dealId: base.opportunityId,
+            status: "PENDING",
+            run: { submittedBy: options.viewerUserId }
+          }
+        })
+      : listSuggestions(base.sourceOpportunityId ?? base.opportunityId).filter(
+          (suggestion) => suggestion.status === "pending"
+        ).length;
 
   const managerRestricted =
     options.viewerRole === "MANAGER" &&
@@ -333,13 +349,44 @@ export async function getDealById(
           deal.sourceOpportunityId ?? deal.opportunityId,
           connectors.mode === "legacy_env" ? undefined : connectors.salesforce
         )
-      : TAS_TEMPLATE.flatMap((section) =>
-          section.questions.map((question) => ({
-            questionId: question.id,
-            status: "empty" as const,
-            evidence: []
-          }))
-        );
+      : options?.viewerUserId
+        ? await (async () => {
+            const viewerUserId = options?.viewerUserId;
+            if (!viewerUserId) {
+              return TAS_TEMPLATE.flatMap((section) =>
+                section.questions.map((question) => ({
+                  questionId: question.id,
+                  status: "empty" as const,
+                  evidence: []
+                }))
+              );
+            }
+
+            const saved = await listManualTasAnswers({
+              dealId: deal.opportunityId,
+              userId: viewerUserId
+            });
+            const savedByQuestion = new Map(saved.map((row) => [row.questionId, row]));
+            return TAS_TEMPLATE.flatMap((section) =>
+              section.questions.map((question) => {
+                const existing = savedByQuestion.get(question.id);
+                return (
+                  existing ?? {
+                    questionId: question.id,
+                    status: "empty" as const,
+                    evidence: []
+                  }
+                );
+              })
+            );
+          })()
+        : TAS_TEMPLATE.flatMap((section) =>
+            section.questions.map((question) => ({
+              questionId: question.id,
+              status: "empty" as const,
+              evidence: []
+            }))
+          );
 
   const audit = calculateAudit(
     deal.sourceOpportunityId ?? deal.opportunityId,

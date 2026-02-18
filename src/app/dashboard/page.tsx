@@ -5,8 +5,8 @@ export default function DashboardPage() {
   return (
     <AppShell>
       <section className="page-header">
-        <h2>Command Center</h2>
-        <p>Monitor active opportunities, review TAS coverage, and push updates with minimal admin overhead.</p>
+        <h2>Deal Workspace Index</h2>
+        <p>Track deals, create new cards, and jump into a deal to ingest context with LLM-to-TAS mapping.</p>
       </section>
       <DashboardClient />
     </AppShell>

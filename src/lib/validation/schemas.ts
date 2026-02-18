@@ -42,3 +42,21 @@ export const sourceMappingConfirmSchema = z.object({
   confirmed: z.boolean(),
   actor: z.string().min(1)
 });
+
+export const ingestionSubmitSchema = z.object({
+  rawContext: z.string().min(20),
+  sourceType: z
+    .enum(["call_notes", "slack", "email", "doc", "other", "pasted_context"])
+    .default("pasted_context")
+});
+
+export const ingestionDeltaDecisionSchema = z.object({
+  action: z.enum(["accept", "edit_then_accept", "reject"]),
+  editedAnswer: z.string().min(3).optional(),
+  rejectReason: z.string().min(2).optional()
+});
+
+export const ingestionBulkDecisionSchema = z.object({
+  action: z.enum(["accept", "reject"]),
+  minConfidence: z.number().min(0).max(1).optional()
+});

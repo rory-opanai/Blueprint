@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const CALLBACK_PATH_REGEX = /^\/api\/connectors\/[^/]+\/callback$/;
+const localBypassAuth = process.env.LOCAL_DEMO_BYPASS_AUTH === "true";
 const authSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
 const googleClientId = process.env.NEXTAUTH_GOOGLE_ID ?? process.env.GOOGLE_OAUTH_CLIENT_ID;
 const googleClientSecret =
@@ -23,6 +24,10 @@ function isPublicPath(pathname: string) {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (localBypassAuth) {
+    return NextResponse.next();
+  }
 
   if (isPublicPath(pathname)) {
     return NextResponse.next();

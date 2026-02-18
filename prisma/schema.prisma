@@ -57,6 +57,19 @@ enum EvidenceVisibility {
   MANAGER_SUMMARY
 }
 
+enum IngestionRunStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum IngestionDeltaStatus {
+  PENDING
+  ACCEPTED
+  EDITED_ACCEPTED
+  REJECTED
+}
+
 model User {
   id            String                    @id @default(cuid())
   name          String?
@@ -73,6 +86,9 @@ model User {
   connectorOauthStates   ConnectorOauthState[]
   manualDeals            ManualDeal[]
   slackDealUpdates       SlackDealUpdate[]
+  manualTasAnswers       ManualTasAnswer[]
+  ingestionRuns          IngestionRun[]
+  ingestionDecisions     IngestionDelta[]
 }
 
 model Account {
@@ -192,8 +208,86 @@ model ManualDeal {
   updatedAt           DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasAnswers     ManualTasAnswer[]
+  ingestionRuns  IngestionRun[]
+  ingestionDeltas IngestionDelta[]
 
   @@index([userId, ownerEmail])
+}
+
+model ManualTasAnswer {
+  id           String   @id @default(cuid())
+  dealId        String
+  userId        String
+  questionId    String
+  answer        String
+  status        TasStatus @default(MANUAL)
+  evidenceLinks Json?
+  updatedBy     String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  deal ManualDeal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([dealId, questionId])
+  @@index([userId, dealId])
+}
+
+model IngestionRun {
+  id            String             @id @default(cuid())
+  dealId         String
+  submittedBy    String
+  sourceType     String             @default("pasted_context")
+  rawContextEnc  String
+  status         IngestionRunStatus @default(PROCESSING)
+  model          String
+  errorMessage   String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  deal      ManualDeal         @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  submitter User               @relation(fields: [submittedBy], references: [id], onDelete: Cascade)
+  snapshots IngestionSnapshot[]
+  deltas    IngestionDelta[]
+
+  @@index([dealId, createdAt])
+}
+
+model IngestionSnapshot {
+  id         String   @id @default(cuid())
+  runId      String
+  version    Int
+  parsedJson Json
+  createdAt  DateTime @default(now())
+
+  run IngestionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, version])
+  @@index([runId])
+}
+
+model IngestionDelta {
+  id            String              @id @default(cuid())
+  runId         String
+  dealId        String
+  questionId    String
+  oldValue      String?
+  proposedValue String
+  confidence    Float
+  evidence      Json?
+  reasoning     String
+  status        IngestionDeltaStatus @default(PENDING)
+  decidedBy     String?
+  decidedAt     DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  run      IngestionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  deal     ManualDeal   @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  decider  User?        @relation(fields: [decidedBy], references: [id], onDelete: SetNull)
+
+  @@index([dealId, status, createdAt])
 }
 
 model SlackDealUpdate {

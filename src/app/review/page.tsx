@@ -1,34 +1,65 @@
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { listSuggestions } from "@/lib/services/suggestions";
+import { requireUserSession } from "@/lib/auth/guards";
+import { listDealsForUser } from "@/lib/services/deal-aggregator";
+import { listDealReviewQueue } from "@/lib/services/ingestions";
 
-export default function ReviewPage() {
-  const suggestions = listSuggestions();
+export default async function ReviewPage() {
+  const viewer = await requireUserSession();
+  const deals = await listDealsForUser({
+    viewerUserId: viewer.id,
+    viewerEmail: viewer.email,
+    viewerRole: viewer.role,
+    withSignals: false
+  });
+
+  const queueByDeal = await Promise.all(
+    deals.map(async (deal) => ({
+      deal,
+      queue: await listDealReviewQueue({
+        dealId: deal.opportunityId,
+        userId: viewer.id
+      })
+    }))
+  );
+
+  const totalPending = queueByDeal.reduce(
+    (sum, entry) => sum + entry.queue.filter((item) => item.status === "pending").length,
+    0
+  );
 
   return (
     <AppShell>
       <section className="page-header">
         <h2>Review Queue</h2>
-        <p>Approve, edit-approve, or reject TAS updates before Salesforce write-back.</p>
+        <p>{totalPending} pending deltas across your deals.</p>
       </section>
       <section className="queue">
-        {suggestions.map((s) => (
-          <article key={s.id} className="suggestion">
-            <h3>{s.tasQuestionId} ({s.opportunityId})</h3>
-            <p>{s.proposedAnswer}</p>
-            <p>Confidence: {Math.round(s.confidence * 100)}%</p>
-            <p>{s.reasoningSummary}</p>
-            <div className="chips">
-              {s.evidencePointers.map((e) => (
-                <a key={e.id} href={e.deepLink} target="_blank" rel="noreferrer">{e.label}</a>
-              ))}
-            </div>
-            <div className="actions">
-              <button>Accept</button>
-              <button>Edit + Accept</button>
-              <button>Reject</button>
-            </div>
+        {queueByDeal.length === 0 ? (
+          <article className="suggestion">
+            <h3>No deals yet</h3>
+            <p>Create a deal and submit context from the deal page.</p>
           </article>
-        ))}
+        ) : (
+          queueByDeal.map(({ deal, queue }) => (
+            <article key={deal.opportunityId} className="suggestion">
+              <h3>
+                {deal.accountName} · {deal.opportunityName}
+              </h3>
+              <p>
+                Pending: {queue.filter((item) => item.status === "pending").length} · Total: {queue.length}
+              </p>
+              {queue.slice(0, 5).map((item) => (
+                <p key={item.id}>
+                  {item.questionId}: {item.status} ({Math.round(item.confidence * 100)}%)
+                </p>
+              ))}
+              <div className="actions">
+                <Link href={`/deals/${deal.opportunityId}`}>Open deal workspace</Link>
+              </div>
+            </article>
+          ))
+        )}
       </section>
     </AppShell>
   );

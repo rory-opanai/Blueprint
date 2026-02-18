@@ -193,3 +193,64 @@ export type SlackChannelSubscriptionView = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type IngestionSourceType = "call_notes" | "slack" | "email" | "doc" | "other" | "pasted_context";
+
+export type IngestionDeltaStatus = "pending" | "accepted" | "edited_accepted" | "rejected";
+
+export type TasExtractionField = {
+  questionId: string;
+  proposedAnswer: string;
+  confidence: number;
+  evidenceSnippets: string[];
+  reasoning: string;
+};
+
+export type IngestionDeltaView = {
+  id: string;
+  runId: string;
+  dealId: string;
+  questionId: string;
+  questionPrompt: string;
+  oldValue?: string;
+  proposedValue: string;
+  confidence: number;
+  evidenceSnippets: string[];
+  reasoning: string;
+  status: IngestionDeltaStatus;
+  createdAt: string;
+  decidedAt?: string;
+};
+
+export type IngestionRunView = {
+  id: string;
+  dealId: string;
+  sourceType: string;
+  status: "processing" | "completed" | "failed";
+  model: string;
+  createdAt: string;
+  errorMessage?: string;
+  deltaCount: number;
+};
+
+export type TasSectionQuality = {
+  sectionId: string;
+  confidence: number;
+  rationale: string;
+  outstandingItems: string[];
+};
+
+export type TasQuestionQuality = {
+  questionId: string;
+  confidence: number;
+  verdict: "confirmed" | "not_confirmed";
+  rationale: string;
+};
+
+export type TasQualityReport = {
+  overallConfidence: number;
+  criticalFlags: string[];
+  sectionQuality: TasSectionQuality[];
+  questionQuality: TasQuestionQuality[];
+  generatedAt: string;
+};

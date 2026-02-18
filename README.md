@@ -27,8 +27,11 @@ Blueprint is a Next.js command center for TAS execution. Salesforce is canonical
 - `GET /api/deals/[opportunityId]`
 - `PATCH /api/deals/[opportunityId]/tas`
 - `GET /api/deals/[opportunityId]/audit`
+- `GET|POST /api/deals/[opportunityId]/ingestions`
+- `GET /api/deals/[opportunityId]/review-queue`
 - `GET /api/suggestions`
 - `POST /api/suggestions/[suggestionId]/decision`
+- `POST /api/review/[deltaId]/decision`
 - `POST /api/commitments`
 - `POST /api/ingest/gong`
 - `POST /api/slack/events`
@@ -105,6 +108,29 @@ Optional UI defaults:
 NEXT_PUBLIC_DEFAULT_OWNER_EMAIL=owner@company.com
 ```
 
+Local POC mode (Codex-style manual ingestion):
+
+```bash
+LOCAL_DEMO_BYPASS_AUTH=true
+LOCAL_DEMO_USER_EMAIL=demo@blueprint.local
+LOCAL_DEMO_USER_NAME="Blueprint Demo User"
+CONNECTOR_AUTH_MODE=legacy_env
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4.1-mini
+CONNECTOR_ENCRYPTION_KEY=<base64-32-byte-key>
+```
+
+Generate `CONNECTOR_ENCRYPTION_KEY`:
+
+```bash
+openssl rand -base64 32
+```
+
+When enabled:
+- Middleware and APIs allow a local demo user session automatically.
+- Manual deals become the primary source list in the left rail.
+- Pasted context is encrypted, parsed by LLM, and converted into reviewable TAS deltas.
+
 Optional local storage directory override:
 
 ```bash
@@ -121,6 +147,16 @@ Notes:
 npm install
 npm run dev
 ```
+
+Then open `http://localhost:3000/dashboard`.
+
+For the POC ingestion workflow:
+
+1. Create/select a manual deal from the left rail.
+2. Open the deal page.
+3. Click the `+ Context` floating action button.
+4. Paste context and submit.
+5. Review deltas and accept/edit/reject.
 
 ## Quality checks
 

@@ -5,6 +5,12 @@ const ENCRYPTION_VERSION = 1;
 function getEncryptionKey(): Buffer {
   const raw = process.env.CONNECTOR_ENCRYPTION_KEY;
   if (!raw) {
+    if (process.env.LOCAL_DEMO_BYPASS_AUTH === "true") {
+      return crypto
+        .createHash("sha256")
+        .update(process.env.LOCAL_DEMO_USER_EMAIL ?? "blueprint-local-demo")
+        .digest();
+    }
     throw new Error("Missing CONNECTOR_ENCRYPTION_KEY.");
   }
 
