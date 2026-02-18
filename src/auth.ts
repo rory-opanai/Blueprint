@@ -6,13 +6,14 @@ import { prisma } from "@/lib/prisma";
 const googleClientId = process.env.NEXTAUTH_GOOGLE_ID ?? process.env.GOOGLE_OAUTH_CLIENT_ID;
 const googleClientSecret =
   process.env.NEXTAUTH_GOOGLE_SECRET ?? process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+const authSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
 
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
   session: {
     strategy: "jwt" as const
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: authSecret,
   providers:
     googleClientId && googleClientSecret
       ? [

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const CALLBACK_PATH_REGEX = /^\/api\/connectors\/[^/]+\/callback$/;
+const authSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
 
 function isPublicPath(pathname: string) {
   return (
@@ -24,7 +25,7 @@ export async function middleware(request: NextRequest) {
 
   const token = await getToken({
     req: request,
-    secret: process.env.NEXTAUTH_SECRET
+    secret: authSecret
   });
 
   if (token) {
