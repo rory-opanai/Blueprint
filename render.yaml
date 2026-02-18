@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: blueprint-command-center
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /dashboard
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: SALESFORCE_INSTANCE_URL
+        sync: false
+      - key: SALESFORCE_ACCESS_TOKEN
+        sync: false
+      - key: SALESFORCE_API_VERSION
+        value: v60.0
+      - key: SALESFORCE_TAS_OBJECT
+        value: Opportunity_Blueprint__c
+      - key: SALESFORCE_TAS_OPPORTUNITY_FIELD
+        value: Opportunity__c
+      - key: SALESFORCE_TAS_FIELD_MAP
+        sync: false
+      - key: GOOGLE_GMAIL_ACCESS_TOKEN
+        sync: false
+      - key: SLACK_USER_TOKEN
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: GONG_ACCESS_KEY
+        sync: false
+      - key: GONG_ACCESS_KEY_SECRET
+        sync: false
+      - key: GONG_API_BASE_URL
+        value: https://api.gong.io
+      - key: GONG_SIGNAL_ENDPOINT
+        sync: false
+      - key: GTM_AGENT_BASE_URL
+        sync: false
+      - key: GTM_AGENT_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_DEFAULT_OWNER_EMAIL
+        sync: false

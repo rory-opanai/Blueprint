@@ -1,0 +1,237 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e57] [cursor=pointer]:
+    - img [ref=e58]
+  - alert [ref=e51]
+  - generic [ref=e98]:
+    - complementary [ref=e99]:
+      - generic [ref=e100]:
+        - heading "Blueprint" [level=1] [ref=e101]
+        - paragraph [ref=e102]: TAS Command Center
+      - navigation [ref=e103]:
+        - link "Dashboard" [ref=e104] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Connectors" [ref=e105] [cursor=pointer]:
+          - /url: /connectors
+        - link "Review Queue" [ref=e106] [cursor=pointer]:
+          - /url: /review
+        - link "Audit" [ref=e107] [cursor=pointer]:
+          - /url: /audit
+        - link "Walkthrough" [ref=e108] [cursor=pointer]:
+          - /url: /walkthrough
+      - generic [ref=e109]:
+        - strong [ref=e110]: MVP mode
+        - paragraph [ref=e111]: Salesforce is canonical. No auto-write without approval.
+    - main [ref=e112]:
+      - generic [ref=e113]:
+        - generic [ref=e114]:
+          - 'heading "Allegro: API" [level=2] [ref=e115]'
+          - paragraph [ref=e116]: Discovery | $1,000,000 | Close 3/19/2026
+        - generic [ref=e117]:
+          - generic [ref=e118]:
+            - generic [ref=e119]: Completion
+            - strong [ref=e120]: 0/24
+          - generic [ref=e121]:
+            - generic [ref=e122]: Evidence
+            - strong [ref=e123]: 0/24
+          - generic [ref=e124]:
+            - generic [ref=e125]: Critical gaps
+            - strong [ref=e126]: "5"
+        - generic [ref=e127]:
+          - heading "Source Signals" [level=3] [ref=e128]
+          - paragraph [ref=e129]: No Gmail/Slack/Gong/GTM Agent signals were found for this deal.
+        - generic [ref=e130]:
+          - heading "Consolidated Insights" [level=3] [ref=e131]
+          - paragraph [ref=e132]: Deduplicated, standardized statements merged across connectors and Slack updates.
+          - paragraph [ref=e133]: No consolidated insight available yet.
+        - generic [ref=e134]:
+          - heading "Strategic Initiative & CEO Priority" [level=3] [ref=e135]
+          - generic [ref=e136]:
+            - article [ref=e137]:
+              - heading "What is the strategic initiative tied to this deal?" [level=4] [ref=e138]
+              - paragraph [ref=e139]:
+                - text: "Status:"
+                - strong [ref=e140]: empty
+              - paragraph [ref=e141]: No answer yet
+              - paragraph [ref=e142]: "Updated: Never by -"
+            - article [ref=e143]:
+              - heading "What CEO-level priority does this initiative serve?" [level=4] [ref=e144]
+              - paragraph [ref=e145]:
+                - text: "Status:"
+                - strong [ref=e146]: empty
+              - paragraph [ref=e147]: No answer yet
+              - paragraph [ref=e148]: "Updated: Never by -"
+            - article [ref=e149]:
+              - heading "What board-level pressure is influencing urgency?" [level=4] [ref=e150]
+              - paragraph [ref=e151]:
+                - text: "Status:"
+                - strong [ref=e152]: empty
+              - paragraph [ref=e153]: No answer yet
+              - paragraph [ref=e154]: "Updated: Never by -"
+            - article [ref=e155]:
+              - heading "What outcome must happen this quarter?" [level=4] [ref=e156]
+              - paragraph [ref=e157]:
+                - text: "Status:"
+                - strong [ref=e158]: empty
+              - paragraph [ref=e159]: No answer yet
+              - paragraph [ref=e160]: "Updated: Never by -"
+            - article [ref=e161]:
+              - heading "What happens if this initiative slips?" [level=4] [ref=e162]
+              - paragraph [ref=e163]:
+                - text: "Status:"
+                - strong [ref=e164]: empty
+              - paragraph [ref=e165]: No answer yet
+              - paragraph [ref=e166]: "Updated: Never by -"
+        - generic [ref=e167]:
+          - heading "Economic Value & Consequences" [level=3] [ref=e168]
+          - generic [ref=e169]:
+            - article [ref=e170]:
+              - heading "What is the primary metric this deal moves?" [level=4] [ref=e171]
+              - paragraph [ref=e172]:
+                - text: "Status:"
+                - strong [ref=e173]: empty
+              - paragraph [ref=e174]: No answer yet
+              - paragraph [ref=e175]: "Updated: Never by -"
+            - article [ref=e176]:
+              - heading "What is the baseline value today?" [level=4] [ref=e177]
+              - paragraph [ref=e178]:
+                - text: "Status:"
+                - strong [ref=e179]: empty
+              - paragraph [ref=e180]: No answer yet
+              - paragraph [ref=e181]: "Updated: Never by -"
+            - article [ref=e182]:
+              - heading "What is the projected value at success?" [level=4] [ref=e183]
+              - paragraph [ref=e184]:
+                - text: "Status:"
+                - strong [ref=e185]: empty
+              - paragraph [ref=e186]: No answer yet
+              - paragraph [ref=e187]: "Updated: Never by -"
+            - article [ref=e188]:
+              - heading "What is the quantified cost of inaction?" [level=4] [ref=e189]
+              - paragraph [ref=e190]:
+                - text: "Status:"
+                - strong [ref=e191]: empty
+              - paragraph [ref=e192]: No answer yet
+              - paragraph [ref=e193]: "Updated: Never by -"
+            - article [ref=e194]:
+              - heading "Who validates the value model?" [level=4] [ref=e195]
+              - paragraph [ref=e196]:
+                - text: "Status:"
+                - strong [ref=e197]: empty
+              - paragraph [ref=e198]: No answer yet
+              - paragraph [ref=e199]: "Updated: Never by -"
+            - article [ref=e200]:
+              - heading "What financial risk remains unresolved?" [level=4] [ref=e201]
+              - paragraph [ref=e202]:
+                - text: "Status:"
+                - strong [ref=e203]: empty
+              - paragraph [ref=e204]: No answer yet
+              - paragraph [ref=e205]: "Updated: Never by -"
+        - generic [ref=e206]:
+          - heading "Power, Politics, Signature & Partners" [level=3] [ref=e207]
+          - generic [ref=e208]:
+            - article [ref=e209]:
+              - heading "Who is the economic buyer?" [level=4] [ref=e210]
+              - paragraph [ref=e211]:
+                - text: "Status:"
+                - strong [ref=e212]: empty
+              - paragraph [ref=e213]: No answer yet
+              - paragraph [ref=e214]: "Updated: Never by -"
+            - article [ref=e215]:
+              - heading "Who signs and what is the signature path?" [level=4] [ref=e216]
+              - paragraph [ref=e217]:
+                - text: "Status:"
+                - strong [ref=e218]: empty
+              - paragraph [ref=e219]: No answer yet
+              - paragraph [ref=e220]: "Updated: Never by -"
+            - article [ref=e221]:
+              - heading "Who can block this deal internally?" [level=4] [ref=e222]
+              - paragraph [ref=e223]:
+                - text: "Status:"
+                - strong [ref=e224]: empty
+              - paragraph [ref=e225]: No answer yet
+              - paragraph [ref=e226]: "Updated: Never by -"
+            - article [ref=e227]:
+              - heading "Who champions this deal and why?" [level=4] [ref=e228]
+              - paragraph [ref=e229]:
+                - text: "Status:"
+                - strong [ref=e230]: empty
+              - paragraph [ref=e231]: No answer yet
+              - paragraph [ref=e232]: "Updated: Never by -"
+            - article [ref=e233]:
+              - heading "Who influences technical selection?" [level=4] [ref=e234]
+              - paragraph [ref=e235]:
+                - text: "Status:"
+                - strong [ref=e236]: empty
+              - paragraph [ref=e237]: No answer yet
+              - paragraph [ref=e238]: "Updated: Never by -"
+            - article [ref=e239]:
+              - heading "Which procurement constraints matter?" [level=4] [ref=e240]
+              - paragraph [ref=e241]:
+                - text: "Status:"
+                - strong [ref=e242]: empty
+              - paragraph [ref=e243]: No answer yet
+              - paragraph [ref=e244]: "Updated: Never by -"
+            - article [ref=e245]:
+              - heading "Which legal/security approvers are required?" [level=4] [ref=e246]
+              - paragraph [ref=e247]:
+                - text: "Status:"
+                - strong [ref=e248]: empty
+              - paragraph [ref=e249]: No answer yet
+              - paragraph [ref=e250]: "Updated: Never by -"
+            - article [ref=e251]:
+              - heading "What partner dependencies affect close?" [level=4] [ref=e252]
+              - paragraph [ref=e253]:
+                - text: "Status:"
+                - strong [ref=e254]: empty
+              - paragraph [ref=e255]: No answer yet
+              - paragraph [ref=e256]: "Updated: Never by -"
+        - generic [ref=e257]:
+          - heading "Vision Alignment" [level=3] [ref=e258]
+          - generic [ref=e259]:
+            - article [ref=e260]:
+              - heading "What future-state vision did customer confirm?" [level=4] [ref=e261]
+              - paragraph [ref=e262]:
+                - text: "Status:"
+                - strong [ref=e263]: empty
+              - paragraph [ref=e264]: No answer yet
+              - paragraph [ref=e265]: "Updated: Never by -"
+            - article [ref=e266]:
+              - heading "What proof points made the vision credible?" [level=4] [ref=e267]
+              - paragraph [ref=e268]:
+                - text: "Status:"
+                - strong [ref=e269]: empty
+              - paragraph [ref=e270]: No answer yet
+              - paragraph [ref=e271]: "Updated: Never by -"
+        - generic [ref=e272]:
+          - heading "OpenAI Differentiation" [level=3] [ref=e273]
+          - generic [ref=e274]:
+            - article [ref=e275]:
+              - heading "Which OpenAI differentiator matters most for this deal?" [level=4] [ref=e276]
+              - paragraph [ref=e277]:
+                - text: "Status:"
+                - strong [ref=e278]: empty
+              - paragraph [ref=e279]: No answer yet
+              - paragraph [ref=e280]: "Updated: Never by -"
+            - article [ref=e281]:
+              - heading "How is differentiation proven in customer context?" [level=4] [ref=e282]
+              - paragraph [ref=e283]:
+                - text: "Status:"
+                - strong [ref=e284]: empty
+              - paragraph [ref=e285]: No answer yet
+              - paragraph [ref=e286]: "Updated: Never by -"
+        - generic [ref=e287]:
+          - heading "Competitive Reality" [level=3] [ref=e288]
+          - article [ref=e290]:
+            - heading "Who are active competitors and why could they win?" [level=4] [ref=e291]
+            - paragraph [ref=e292]:
+              - text: "Status:"
+              - strong [ref=e293]: empty
+            - paragraph [ref=e294]: No answer yet
+            - paragraph [ref=e295]: "Updated: Never by -"
+        - generic [ref=e296]:
+          - heading "Commitments" [level=3] [ref=e297]
+          - paragraph [ref=e298]: One next action is required in every stage gate.
+          - list [ref=e299]:
+            - listitem [ref=e300]: "Create commitment to resolve: Missing required TAS answer: What is the strategic initiative tied to this deal?"
+            - listitem [ref=e301]: "Create commitment to resolve: Missing required TAS answer: What CEO-level priority does this initiative serve?"
+            - listitem [ref=e302]: "Create commitment to resolve: Missing required TAS answer: What is the primary metric this deal moves?"

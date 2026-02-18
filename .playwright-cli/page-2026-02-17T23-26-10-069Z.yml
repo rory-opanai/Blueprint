@@ -1,0 +1,69 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - heading "Blueprint" [level=1] [ref=e5]
+        - paragraph [ref=e6]: TAS Command Center
+      - navigation [ref=e7]:
+        - link "Dashboard" [ref=e8] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Connectors" [ref=e9] [cursor=pointer]:
+          - /url: /connectors
+        - link "Review Queue" [ref=e10] [cursor=pointer]:
+          - /url: /review
+        - link "Audit" [ref=e11] [cursor=pointer]:
+          - /url: /audit
+        - link "Walkthrough" [ref=e12] [cursor=pointer]:
+          - /url: /walkthrough
+      - generic [ref=e13]:
+        - strong [ref=e14]: MVP mode
+        - paragraph [ref=e15]: Salesforce is canonical. No auto-write without approval.
+    - main [ref=e16]:
+      - generic [ref=e17]:
+        - generic [ref=e18]:
+          - heading "Command Center" [level=2] [ref=e19]
+          - paragraph [ref=e20]: Pull live deals from Salesforce, enrich from Gmail/Slack/Gong/GTM Agent, and create new cards when needed.
+        - generic [ref=e21]:
+          - generic [ref=e22]:
+            - generic [ref=e23]:
+              - generic [ref=e24]: Owner Email
+              - textbox "Owner Email" [ref=e25]:
+                - /placeholder: owner@company.com
+            - generic [ref=e26]:
+              - generic [ref=e27]: Owner Name
+              - textbox "Owner Name" [ref=e28]:
+                - /placeholder: Account Director name
+            - button "Refresh Deals" [disabled] [ref=e30]
+          - generic [ref=e31]:
+            - heading "Create Deal Card" [level=3] [ref=e32]
+            - generic [ref=e33]:
+              - generic [ref=e34]:
+                - text: Account
+                - textbox "Account" [ref=e35]:
+                  - /placeholder: Acme Corp
+              - generic [ref=e36]:
+                - text: Opportunity
+                - textbox "Opportunity" [ref=e37]:
+                  - /placeholder: AI Service Desk Rollout
+              - generic [ref=e38]:
+                - text: Stage
+                - combobox "Stage" [ref=e39]:
+                  - option "Discovery" [selected]
+                  - option "Solutioning"
+                  - option "Commit"
+              - generic [ref=e40]:
+                - text: Amount
+                - spinbutton "Amount" [ref=e41]: "0"
+              - generic [ref=e42]:
+                - text: Close Date
+                - textbox "Close Date" [ref=e43]: 2026-03-19
+              - generic [ref=e44]:
+                - checkbox "Create Opportunity in Salesforce" [ref=e45]
+                - text: Create Opportunity in Salesforce
+              - button "Create Card" [disabled] [ref=e46]
+          - article [ref=e48]:
+            - heading "No deals found" [level=3] [ref=e49]
+            - paragraph [ref=e50]: Connect Salesforce and provide an owner email to pull active opportunities, or create a manual deal card above.
+  - button "Open Next.js Dev Tools" [ref=e56] [cursor=pointer]:
+    - img [ref=e57]
+  - alert [ref=e61]

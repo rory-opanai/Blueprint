@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  AD
+  SE
+  SA
+  MANAGER
+}
+
+enum TasStatus {
+  EMPTY
+  MANUAL
+  SUGGESTED
+  CONFIRMED
+  STALE
+  CONTRADICTION
+}
+
+enum SuggestionStatus {
+  PENDING
+  ACCEPTED
+  EDITED_ACCEPTED
+  REJECTED
+}
+
+enum RiskSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model OpportunityCache {
+  id                String              @id
+  accountName       String
+  opportunityName   String
+  stage             String
+  amount            Decimal             @db.Decimal(18, 2)
+  closeDate         DateTime
+  ownerAd           String
+  ownerSe           String?
+  ownerSa           String?
+  nextActionOwner   String?
+  nextActionDueDate DateTime?
+  sfLastSyncedAt    DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  tasQuestions      TasQuestionState[]
+  suggestions       SuggestionDelta[]
+  commitments       Commitment[]
+  audits            AuditRun[]
+  sourceMappings    SourceMappingConfirmation[]
+}
+
+model BlueprintSnapshot {
+  id            String   @id @default(cuid())
+  opportunityId String
+  version       Int
+  reason        String
+  payload       Json
+  createdBy     String
+  createdAt     DateTime @default(now())
+
+  @@unique([opportunityId, version])
+}
+
+model TasQuestionState {
+  id               String           @id @default(cuid())
+  opportunityId    String
+  questionId       String
+  sectionId        String
+  status           TasStatus        @default(EMPTY)
+  canonicalAnswer  String?
+  provenanceType   String?
+  provenanceBy     String?
+  provenanceAt     DateTime?
+  isEvidenceBacked Boolean          @default(false)
+  freshnessDays    Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  opportunity      OpportunityCache @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  evidence         EvidencePointer[]
+
+  @@unique([opportunityId, questionId])
+}
+
+model EvidencePointer {
+  id              String            @id @default(cuid())
+  opportunityId   String
+  questionStateId String?
+  sourceType      String
+  sourceId        String
+  deepLink        String
+  excerpt         String?
+  capturedAt      DateTime
+  confidence      Float?
+  createdAt       DateTime          @default(now())
+  questionState   TasQuestionState? @relation(fields: [questionStateId], references: [id], onDelete: SetNull)
+}
+
+model SuggestionDelta {
+  id               String           @id @default(cuid())
+  opportunityId    String
+  tasQuestionId    String
+  proposedAnswer   String
+  confidence       Float
+  reasoningSummary String
+  status           SuggestionStatus @default(PENDING)
+  rejectedReason   String?
+  createdAt        DateTime         @default(now())
+  decidedAt        DateTime?
+  decidedBy        String?
+  opportunity      OpportunityCache @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  evidence         SuggestionEvidence[]
+}
+
+model SuggestionEvidence {
+  id           String          @id @default(cuid())
+  suggestionId String
+  deepLink     String
+  sourceType   String
+  sourceId     String
+  excerpt      String?
+  suggestion   SuggestionDelta @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+}
+
+model ReviewActionLog {
+  id             String   @id @default(cuid())
+  suggestionId   String
+  opportunityId  String
+  action         String
+  actor          String
+  notes          String?
+  idempotencyKey String
+  createdAt      DateTime @default(now())
+
+  @@unique([idempotencyKey])
+}
+
+model AuditRun {
+  id                  String           @id @default(cuid())
+  opportunityId       String
+  stage               String
+  completionPct       Float
+  evidenceCoveragePct Float
+  criticalGapCount    Int
+  contradictionCount  Int
+  staleCount          Int
+  riskSeverity        RiskSeverity
+  findings            Json
+  createdAt           DateTime         @default(now())
+  opportunity         OpportunityCache @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+}
+
+model SourceMappingConfirmation {
+  id            String           @id @default(cuid())
+  opportunityId String
+  sourceType    String
+  sourceRef     String
+  confidence    Float
+  confirmed     Boolean          @default(false)
+  confirmedBy   String?
+  confirmedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  opportunity   OpportunityCache @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+}
+
+model ConnectorHealth {
+  id             String   @id @default(cuid())
+  connectorType  String
+  status         String
+  lastIngestedAt DateTime?
+  details        String?
+  updatedAt      DateTime @updatedAt
+
+  @@unique([connectorType])
+}
+
+model Commitment {
+  id               String           @id @default(cuid())
+  opportunityId    String
+  title            String
+  owner            String
+  dueDate          DateTime
+  status           String
+  source           String
+  salesforceTaskId String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  opportunity      OpportunityCache @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+}
