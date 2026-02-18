@@ -4,12 +4,17 @@ import type { NextRequest } from "next/server";
 
 const CALLBACK_PATH_REGEX = /^\/api\/connectors\/[^/]+\/callback$/;
 const authSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+const googleClientId = process.env.NEXTAUTH_GOOGLE_ID ?? process.env.GOOGLE_OAUTH_CLIENT_ID;
+const googleClientSecret =
+  process.env.NEXTAUTH_GOOGLE_SECRET ?? process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+const isAuthConfigured = Boolean(authSecret && googleClientId && googleClientSecret);
 
 function isPublicPath(pathname: string) {
   return (
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/slack/events") ||
     CALLBACK_PATH_REGEX.test(pathname) ||
+    pathname.startsWith("/setup") ||
     pathname.startsWith("/_next/static") ||
     pathname.startsWith("/_next/image") ||
     pathname === "/favicon.ico"
@@ -21,6 +26,11 @@ export async function middleware(request: NextRequest) {
 
   if (isPublicPath(pathname)) {
     return NextResponse.next();
+  }
+
+  if (!isAuthConfigured) {
+    const setupUrl = new URL("/setup", request.url);
+    return NextResponse.redirect(setupUrl);
   }
 
   const token = await getToken({

@@ -22,10 +22,7 @@ export const authOptions = {
             clientSecret: googleClientSecret
           })
         ]
-      : [],
-  pages: {
-    signIn: "/api/auth/signin"
-  }
+      : []
 };
 
 export function getAppSession() {
